@@ -1,32 +1,33 @@
 package org.example.safenest.model;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.*;
 import lombok.*;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "wallets")
-@Data @NoArgsConstructor @AllArgsConstructor @Builder
+@Table(name = "wallets",
+        uniqueConstraints = {@UniqueConstraint(columnNames = {"user_id","currency"})})
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Wallet {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @NotBlank
-    @Column(nullable = false)
-    private String currency; // USD, EUR, BTC и т.д.
+    @Column(nullable = false, length = 10)
+    private String currency;
 
-    @NotNull
     @Column(nullable = false)
-    private BigDecimal balance = BigDecimal.ZERO;
+    private BigDecimal balance;
 
-    @Column(nullable = false, updatable = false)
-    private Instant createdAt = Instant.now();
+    @Column(nullable = false)
+    private BigDecimal reserved;
 }

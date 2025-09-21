@@ -1,7 +1,8 @@
-package org.example.safenest.security;
+package org.example.safenest.service;
 
 import org.example.safenest.model.User;
 import org.example.safenest.repository.UserRepository;
+import org.example.safenest.security.UserPrincipal;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
 
