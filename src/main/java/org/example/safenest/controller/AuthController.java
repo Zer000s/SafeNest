@@ -1,5 +1,8 @@
 package org.example.safenest.controller;
 
+import jakarta.validation.Valid;
+import org.example.safenest.dto.UserRequest;
+import org.example.safenest.exception.CustomException;
 import org.example.safenest.model.User;
 import org.example.safenest.repository.UserRepository;
 import org.example.safenest.security.JwtUtils;
@@ -41,38 +44,37 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Map<String,String> body) {
-        String email = body.get("email");
-        String pwd = body.get("password");
-        if(email == null || pwd == null) {
-            return ResponseEntity.badRequest().build();
-        }
-        if(userRepo.existsByEmail(email)){
-            return ResponseEntity.status(HttpStatus.CONFLICT).body("Email exists");
+    public ResponseEntity<?> register(@RequestBody @Valid UserRequest userReq) {
+        if (userRepo.existsByEmail(userReq.getEmail())) {
+            throw new CustomException.UserAlreadyExistsException(userReq.getEmail());
         }
         User u = User.builder()
-                .email(email)
-                .passwordHash(passwordEncoder.encode(pwd))
-                .createdAt(Instant.now())
+                .email(userReq.getEmail())
+                .passwordHash(passwordEncoder.encode(userReq.getPassword()))
                 .kycVerified(false)
                 .build();
         userRepo.save(u);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+        return ResponseEntity.status(201).build();
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String,String> body, HttpServletResponse response) {
-        String email = body.get("email");
-        String pwd = body.get("password");
-        Authentication a = authManager.authenticate(new UsernamePasswordAuthenticationToken(email, pwd));
-        UserPrincipal up = (UserPrincipal) a.getPrincipal();
-        String access = jwtUtils.generateAccessToken(up.getUsername());
-        String refreshRaw = refreshService.createToken(userRepo.findByEmail(up.getUsername()).orElseThrow());
+    public ResponseEntity<?> login(@RequestBody @Valid UserRequest userReq, HttpServletResponse response) {
+        Authentication auth = authManager.authenticate(
+                new UsernamePasswordAuthenticationToken(userReq.getEmail(), userReq.getPassword())
+        );
+        UserPrincipal up = (UserPrincipal) auth.getPrincipal();
+        User user = userRepo.findByEmail(up.getUsername())
+                .orElseThrow(() -> new CustomException.ResourceNotFoundException("User"));
+
+        String accessToken = jwtUtils.generateAccessToken(user.getEmail());
+        String refreshRaw = refreshService.createToken(user);
+
         ResponseCookie cookie = ResponseCookie.from("refreshToken", refreshRaw)
                 .httpOnly(true).secure(true).path("/api/auth/refresh")
                 .maxAge(Duration.ofMillis(refreshMs)).sameSite("Strict").build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-        return ResponseEntity.ok(Map.of("accessToken", access, "tokenType", "Bearer"));
+
+        return ResponseEntity.ok(Map.of("accessToken", accessToken, "tokenType", "Bearer"));
     }
 
     @PostMapping("/refresh")
