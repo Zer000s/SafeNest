@@ -30,6 +30,7 @@ public class RefreshTokenService {
                 .user(user)
                 .tokenHash(hash)
                 .expiryDate(Instant.now().plusMillis(refreshMs))
+                .createdAt(Instant.now())
                 .build();
         repo.save(t);
         return raw;
