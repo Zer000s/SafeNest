@@ -1,6 +1,7 @@
 package org.example.safenest.config;
 
 import org.example.safenest.security.*;
+import org.example.safenest.service.UserDetailsServiceImpl;
 import org.springframework.context.annotation.*;
 import org.springframework.security.authentication.*;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;

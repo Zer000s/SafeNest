@@ -54,6 +54,7 @@ public class AuthController {
                 .email(userReq.getEmail())
                 .passwordHash(passwordEncoder.encode(userReq.getPassword()))
                 .kycVerified(false)
+                .createdAt(Instant.now())
                 .build();
         userRepo.save(u);
         return ResponseEntity.status(201).build();
@@ -86,17 +87,11 @@ public class AuthController {
             HttpServletResponse response) {
 
         if (refreshToken == null || refreshToken.isBlank()) {
-            throw new ApiException("Refresh token is missing", 401);
+            throw new ApiException("Refresh token missing", 401);
         }
 
-        RefreshToken rt;
-        try {
-            rt = refreshService.findByRawToken(refreshToken)
-                    .orElseThrow(() -> new ApiException("Invalid refresh token", 401));
-        }
-        catch (Exception e) {
-            throw new ApiException("Error accessing refresh token store", 500);
-        }
+        RefreshToken rt = refreshService.findByRawToken(refreshToken)
+                .orElseThrow(() -> new ApiException("Invalid refresh token", 401));
 
         if (refreshService.isExpired(rt)) {
             refreshService.delete(rt);
@@ -104,48 +99,32 @@ public class AuthController {
         }
 
         User user = rt.getUser();
-        try {
-            refreshService.delete(rt);
-            String newRaw = refreshService.createToken(user);
+        refreshService.delete(rt);
+        String newRaw = refreshService.createToken(user);
+        String newAccess = jwtUtils.generateAccessToken(user.getEmail());
 
-            String newAccess = jwtUtils.generateAccessToken(user.getEmail());
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", newRaw)
+                .httpOnly(true)
+                .secure(true)
+                .path("/api/auth/refresh")
+                .maxAge(Duration.ofMillis(refreshMs))
+                .sameSite("Strict")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
-            ResponseCookie cookie = ResponseCookie.from("refreshToken", newRaw)
-                    .httpOnly(true)
-                    .secure(true)
-                    .path("/api/auth/refresh")
-                    .maxAge(Duration.ofMillis(refreshMs))
-                    .sameSite("Strict")
-                    .build();
-            response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-
-            return ResponseEntity.ok(Map.of("accessToken", newAccess, "tokenType", "Bearer"));
-
-        } catch (Exception e) {
-            throw new ApiException("Failed to generate new tokens", 500);
-        }
+        return ResponseEntity.ok(Map.of("accessToken", newAccess, "tokenType", "Bearer"));
     }
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(
-            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
             HttpServletResponse response) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new ApiException("Authorization header missing or malformed", 400);
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new ApiException("Refresh token missing", 401);
         }
 
-        String token = authHeader.substring(7).trim();
-        if (token.isEmpty()) {
-            throw new ApiException("Access token is missing", 400);
-        }
-
-        try {
-            String username = jwtUtils.getUsername(token);
-            userRepo.findByEmail(username).ifPresent(refreshService::deleteAllForUser);
-        } catch (Exception e) {
-            throw new ApiException("Invalid access token", 401);
-        }
+        refreshService.findByRawToken(refreshToken).ifPresent(refreshService::delete);
 
         ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
                 .httpOnly(true)
