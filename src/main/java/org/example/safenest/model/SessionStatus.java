@@ -1,6 +1,6 @@
 package org.example.safenest.model;
 
-enum SessionStatus {
+public enum SessionStatus {
     CREATED,
     AWAITING_TRANSFER,
     CONFIRMED_BUYER,
